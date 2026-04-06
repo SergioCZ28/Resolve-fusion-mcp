@@ -60,8 +60,27 @@ comp.StartUndo("name")            # Undo group
 
 ### Common Tool IDs
 `Background`, `Merge`, `Blur`, `Transform`, `ColorCorrector`, `Loader`, `Saver`,
-`MediaIn`, `MediaOut`, `Text+`, `Resize`, `BrightnessContrast`, `ChannelBooleans`,
-`MatteControl`, `Polygon`, `BSpline`
+`MediaIn`, `MediaOut`, `TextPlus`, `Resize`, `BrightnessContrast`, `ChannelBooleans`,
+`MatteControl`, `EllipseMask`, `RectangleMask`, `PolylineMask`, `BSpline`
+
+## MCP Tools (9 total)
+
+### Core tools
+| Tool | Listener command | Description |
+|------|-----------------|-------------|
+| `get_fusion_comp_info` | `get_comp_info` | List all nodes in composition |
+| `add_fusion_tool` | `add_tool` | Create any node by tool ID |
+| `get_fusion_tool_info` | `get_tool_info` | Inspect node parameters |
+| `connect_fusion_nodes` | `connect_nodes` | Wire nodes together |
+| `set_fusion_parameter` | `set_parameter` | Set a parameter value |
+| `execute_fusion_code` | `execute_code` | Run arbitrary Python in Fusion |
+
+### Convenience tools (Tier 1)
+| Tool | Listener command | Description |
+|------|-----------------|-------------|
+| `add_fusion_text` | `add_text` | Create Text+ with content, size, color |
+| `animate_fusion_parameter` | `animate_parameter` | Set keyframes on a parameter |
+| `add_fusion_mask` | `add_mask` | Create mask, optionally connect as EffectMask |
 
 ## Project Structure
 
@@ -101,6 +120,6 @@ python tests/test_socket.py
 
 - snake_case for functions/variables, PascalCase for classes
 - Type hints on function signatures
-- TCP socket on localhost, default port 9876 (same as Blender MCP)
+- TCP socket on localhost, default port 9878
 - JSON commands: `{"type": "cmd", "params": {...}}`
 - JSON responses: `{"status": "success|error", "result|message": ...}`

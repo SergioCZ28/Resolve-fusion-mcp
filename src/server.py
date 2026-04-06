@@ -277,6 +277,114 @@ def set_fusion_parameter(tool_name: str, parameter: str, value: float) -> str:
 
 
 @mcp.tool()
+def add_fusion_text(
+    text: str = "Hello",
+    size: float = 0.1,
+    color_r: float = 1.0,
+    color_g: float = 1.0,
+    color_b: float = 1.0,
+    x: int = -32768,
+    y: int = -32768,
+) -> str:
+    """Create a Text+ node with content, size, and color in one call.
+
+    Convenience tool that creates a TextPlus node and configures it
+    in a single step (instead of add_tool + multiple set_parameter calls).
+
+    Args:
+        text: The text content to display (default: "Hello")
+        size: Font size in Fusion's normalized range (default: 0.1).
+              0.05 = small, 0.1 = medium, 0.2 = large, 0.5 = very large
+        color_r: Red channel 0.0-1.0 (default: 1.0 white)
+        color_g: Green channel 0.0-1.0 (default: 1.0 white)
+        color_b: Blue channel 0.0-1.0 (default: 1.0 white)
+        x: X position in flow view (default: auto-position)
+        y: Y position in flow view (default: auto-position)
+
+    Returns:
+        JSON with the created node's name and applied settings.
+    """
+    conn = get_connection()
+    result = conn.send_command("add_text", {
+        "text": text,
+        "size": size,
+        "color_r": color_r,
+        "color_g": color_g,
+        "color_b": color_b,
+        "x": x,
+        "y": y,
+    })
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def animate_fusion_parameter(
+    tool_name: str,
+    parameter: str,
+    keyframes: list[dict],
+) -> str:
+    """Add keyframes to animate a parameter over time.
+
+    Sets values at specific frames, creating a smooth animation curve.
+    Fusion automatically interpolates between keyframes.
+
+    Args:
+        tool_name: Name of the tool to animate (e.g., "Blur1")
+        parameter: Parameter name to animate (e.g., "XBlurSize", "Size").
+                   Use get_fusion_tool_info() to see available parameters.
+        keyframes: List of keyframe dicts, each with "frame" (int) and
+                   "value" (number). Example:
+                   [{"frame": 0, "value": 0}, {"frame": 30, "value": 5.0}]
+
+    Returns:
+        JSON confirming how many keyframes were set.
+    """
+    conn = get_connection()
+    result = conn.send_command("animate_parameter", {
+        "tool_name": tool_name,
+        "parameter": parameter,
+        "keyframes": keyframes,
+    })
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def add_fusion_mask(
+    mask_type: str = "Ellipse",
+    connect_to: str = "",
+    x: int = -32768,
+    y: int = -32768,
+) -> str:
+    """Create a mask node and optionally connect it as an EffectMask.
+
+    Masks are used to limit the effect of a tool to a specific region.
+    When connect_to is specified, the mask is automatically wired into
+    that tool's EffectMask input.
+
+    Args:
+        mask_type: Shape of the mask. Options: "Ellipse", "Rectangle",
+                   "Polygon" (default: "Ellipse")
+        connect_to: Name of a tool to connect this mask to as its
+                    EffectMask (optional -- leave empty to create unconnected)
+        x: X position in flow view (default: auto-position)
+        y: Y position in flow view (default: auto-position)
+
+    Returns:
+        JSON with mask info and whether it was connected.
+    """
+    conn = get_connection()
+    params = {
+        "mask_type": mask_type,
+        "x": x,
+        "y": y,
+    }
+    if connect_to:
+        params["connect_to"] = connect_to
+    result = conn.send_command("add_mask", params)
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
 def execute_fusion_code(code: str) -> str:
     """Execute arbitrary Python code inside the Fusion environment.
 

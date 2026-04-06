@@ -289,6 +289,177 @@ def handle_set_parameter(fusion, comp, **params):
     }
 
 
+def handle_add_text(fusion, comp, **params):
+    """Create a Text+ node with content, size, and color in one call.
+
+    Params:
+        text: str -- The text content to display
+        size: float -- Font size (default 0.1, Fusion's normalized range)
+        color_r: float -- Red channel 0-1 (default 1.0)
+        color_g: float -- Green channel 0-1 (default 1.0)
+        color_b: float -- Blue channel 0-1 (default 1.0)
+        x: int -- X position in flow view (default auto)
+        y: int -- Y position in flow view (default auto)
+
+    Returns:
+        dict with the created tool's name and settings applied.
+    """
+    text = params.get("text", "Hello")
+    size = params.get("size", 0.1)
+    color_r = params.get("color_r", 1.0)
+    color_g = params.get("color_g", 1.0)
+    color_b = params.get("color_b", 1.0)
+    x = params.get("x", -32768)
+    y = params.get("y", -32768)
+
+    comp.Lock()
+    comp.StartUndo("MCP: Add Text+")
+
+    tool = comp.AddTool("TextPlus", x, y)
+    if tool is None:
+        comp.EndUndo(False)
+        comp.Unlock()
+        raise RuntimeError("Failed to create TextPlus node")
+
+    tool.SetInput("StyledText", text)
+    tool.SetInput("Size", size)
+    tool.SetInput("Red1", color_r)
+    tool.SetInput("Green1", color_g)
+    tool.SetInput("Blue1", color_b)
+
+    comp.EndUndo(True)
+    comp.Unlock()
+
+    return {
+        "name": tool.Name,
+        "type": "TextPlus",
+        "text": text,
+        "size": size,
+        "color": [color_r, color_g, color_b],
+    }
+
+
+def handle_animate_parameter(fusion, comp, **params):
+    """Set keyframes on a tool parameter at specified frames.
+
+    Params:
+        tool_name: str -- Name of the tool (e.g., "Blur1")
+        parameter: str -- Parameter name (e.g., "XBlurSize")
+        keyframes: list -- List of dicts with "frame" (int) and "value" (number)
+                          e.g., [{"frame": 0, "value": 0}, {"frame": 30, "value": 5.0}]
+
+    Returns:
+        dict confirming keyframes were set.
+    """
+    tool_name = params.get("tool_name")
+    parameter = params.get("parameter")
+    keyframes = params.get("keyframes", [])
+
+    if not tool_name or not parameter:
+        raise ValueError("tool_name and parameter are required")
+    if not keyframes:
+        raise ValueError("keyframes list is required (e.g., [{\"frame\": 0, \"value\": 0}])")
+
+    tool = comp.FindTool(tool_name)
+    if tool is None:
+        raise ValueError(f"Tool '{tool_name}' not found")
+
+    comp.Lock()
+    comp.StartUndo(f"MCP: Animate {tool_name}.{parameter}")
+
+    # BezierSpline creates a smooth animation curve
+    inp = getattr(tool, parameter, None)
+    if inp is None:
+        comp.EndUndo(False)
+        comp.Unlock()
+        raise ValueError(f"Parameter '{parameter}' not found on tool '{tool_name}'")
+
+    # Animate: set values at specific frames (Fusion auto-creates keyframes)
+    for kf in keyframes:
+        frame = kf.get("frame", 0)
+        value = kf.get("value", 0)
+        tool.SetInput(parameter, value, frame)
+
+    comp.EndUndo(True)
+    comp.Unlock()
+
+    return {
+        "tool": tool_name,
+        "parameter": parameter,
+        "keyframes_set": len(keyframes),
+        "frames": [kf.get("frame") for kf in keyframes],
+    }
+
+
+def handle_add_mask(fusion, comp, **params):
+    """Create a mask node and optionally connect it as an EffectMask.
+
+    Params:
+        mask_type: str -- "Ellipse", "Rectangle", or "Polygon" (default "Ellipse")
+        connect_to: str -- (optional) Name of tool to connect this mask to as EffectMask
+        x: int -- X position in flow view (default auto)
+        y: int -- Y position in flow view (default auto)
+
+    Returns:
+        dict with created mask info and connection status.
+    """
+    mask_type = params.get("mask_type", "Ellipse")
+    connect_to = params.get("connect_to")
+    x = params.get("x", -32768)
+    y = params.get("y", -32768)
+
+    # Map friendly names to Fusion tool IDs
+    mask_map = {
+        "Ellipse": "EllipseMask",
+        "Rectangle": "RectangleMask",
+        "Polygon": "PolylineMask",
+    }
+
+    tool_id = mask_map.get(mask_type)
+    if tool_id is None:
+        raise ValueError(
+            f"Unknown mask_type '{mask_type}'. Use: Ellipse, Rectangle, or Polygon"
+        )
+
+    comp.Lock()
+    comp.StartUndo(f"MCP: Add {mask_type} Mask")
+
+    mask = comp.AddTool(tool_id, x, y)
+    if mask is None:
+        comp.EndUndo(False)
+        comp.Unlock()
+        raise RuntimeError(f"Failed to create {tool_id} node")
+
+    connected = False
+    if connect_to:
+        target = comp.FindTool(connect_to)
+        if target is None:
+            comp.EndUndo(True)
+            comp.Unlock()
+            return {
+                "name": mask.Name,
+                "type": tool_id,
+                "connected": False,
+                "warning": f"Target tool '{connect_to}' not found -- mask created but not connected",
+            }
+
+        target.ConnectInput("EffectMask", mask)
+        connected = True
+
+    comp.EndUndo(True)
+    comp.Unlock()
+
+    result = {
+        "name": mask.Name,
+        "type": tool_id,
+        "mask_type": mask_type,
+        "connected": connected,
+    }
+    if connected:
+        result["connected_to"] = connect_to
+    return result
+
+
 def handle_execute_code(fusion, comp, **params):
     """Execute arbitrary Python code inside the Fusion environment.
 
@@ -340,6 +511,9 @@ HANDLERS = {
     "get_tool_info": handle_get_tool_info,
     "connect_nodes": handle_connect_nodes,
     "set_parameter": handle_set_parameter,
+    "add_text": handle_add_text,
+    "animate_parameter": handle_animate_parameter,
+    "add_mask": handle_add_mask,
     "execute_code": handle_execute_code,
 }
 
