@@ -18,21 +18,37 @@ Architecture:
 Port: 9876 (same as Blender MCP convention)
 """
 
+import hmac
 import socket
 import threading
 import json
 import io
 import os
 import sys
+import tempfile
 import traceback
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-HOST = "localhost"
+# Bind to 127.0.0.1 explicitly, not "localhost". "localhost" resolves to both
+# IPv4 and IPv6 on some systems, and dual-stack behaviour varies -- 127.0.0.1
+# is unambiguous and stays on the loopback interface.
+HOST = "127.0.0.1"
 PORT = 9878
-LOG_PATH = r"C:\Users\sergi\ExperimentsWindows\MyProjects\mcp_server\davinci-resolve-mcp\listener.log"
+
+# Shared secret read from the environment. If set, every command must include
+# a matching "token" field or it is rejected. This stops *any* other process
+# on the local machine (malicious browser extension, rogue script, ...) from
+# speaking to the listener, since only processes Sergio launches see the env.
+# If unset, the listener still runs but logs a warning at startup.
+AUTH_TOKEN = os.environ.get("FUSION_AUTH_TOKEN", "")
+
+LOG_PATH = os.environ.get(
+    "FUSION_LISTENER_LOG",
+    os.path.join(tempfile.gettempdir(), "fusion_listener.log"),
+)
 
 # ---------------------------------------------------------------------------
 # Fusion API helpers
@@ -534,6 +550,11 @@ def execute_command(command):
     cmd_type = command.get("type")
     params = command.get("params", {})
 
+    if AUTH_TOKEN:
+        supplied = command.get("token", "")
+        if not isinstance(supplied, str) or not hmac.compare_digest(supplied, AUTH_TOKEN):
+            return {"status": "error", "message": "authentication failed"}
+
     if cmd_type not in HANDLERS:
         return {
             "status": "error",
@@ -610,6 +631,12 @@ def start_server():
         # Clear log and write startup message
         with open(LOG_PATH, "w") as f:
             f.write(f"Listening on {HOST}:{PORT}\n")
+            if not AUTH_TOKEN:
+                f.write(
+                    "WARNING: FUSION_AUTH_TOKEN not set -- listener accepts any local "
+                    "connection without auth. Set FUSION_AUTH_TOKEN before launching "
+                    "Resolve to lock it down.\n"
+                )
 
         try:
             while True:
@@ -632,12 +659,13 @@ def start_server():
 #
 # HOW TO START THE LISTENER:
 #
-# In the Fusion console (Py3 tab), paste this one-liner:
+# In the Fusion console (Py3 tab), paste this one-liner (replace PATH with the
+# absolute path to this file on your machine):
 #
-#   exec(open(r"C:\Users\sergi\ExperimentsWindows\MyProjects\mcp_server\davinci-resolve-mcp\src\fusion_listener.py").read())
+#   exec(open(r"PATH/TO/fusion_listener.py").read())
 #
 # The listener will start in a background thread and the console stays usable.
-# You'll see "[MCP Listener] Listening on localhost:9876" when ready.
+# You'll see "Listening on 127.0.0.1:9878" in the log file when ready.
 
 def safe_start_server():
     """Wrapper that catches any crash and writes it to a log file."""
