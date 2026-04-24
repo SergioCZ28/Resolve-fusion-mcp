@@ -21,8 +21,9 @@ from fastmcp import FastMCP
 # Configuration
 # ---------------------------------------------------------------------------
 
-FUSION_HOST = os.getenv("FUSION_HOST", "localhost")
+FUSION_HOST = os.getenv("FUSION_HOST", "127.0.0.1")
 FUSION_PORT = int(os.getenv("FUSION_PORT", "9878"))
+FUSION_AUTH_TOKEN = os.environ.get("FUSION_AUTH_TOKEN", "")
 SOCKET_TIMEOUT = 30.0  # seconds
 
 
@@ -37,8 +38,8 @@ class FusionConnection:
     Singleton pattern: one connection shared across all tool calls.
     Auto-reconnects if the connection drops.
     """
-    host: str = "localhost"
-    port: int = 9876
+    host: str = "127.0.0.1"
+    port: int = 9878
     sock: socket.socket = field(default=None, repr=False)
 
     def connect(self) -> bool:
@@ -89,6 +90,8 @@ class FusionConnection:
             "type": command_type,
             "params": params or {},
         }
+        if FUSION_AUTH_TOKEN:
+            command["token"] = FUSION_AUTH_TOKEN
 
         # Send the command as JSON
         message = json.dumps(command).encode("utf-8")
